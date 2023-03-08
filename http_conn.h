@@ -64,6 +64,7 @@ public:
     void process(); // 处理客户端请求
     bool read();// 非阻塞读
     bool write();// 非阻塞写
+    inline int get_msocket(){return m_sockfd;};
 private:
     void init();    // 初始化连接
     HTTP_CODE process_read();    // 解析HTTP请求

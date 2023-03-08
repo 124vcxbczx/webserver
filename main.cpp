@@ -19,6 +19,7 @@
 #include "locker.h"
 #include "threadpool.h"
 #include "http_conn.h"
+#include "timer.h"
 using namespace std;
 
 #define MAX_FD 65535          //最大的文件描述符个数
@@ -40,6 +41,9 @@ extern int removefd(int epollfd, int fd, bool one_shot);
 //修改文件描述符
 extern void modfd(int epollfd, int fd, int ev);
 
+void cb(http_conn* user_Data){
+    user_Data->close_conn();
+}
 
 int main(int argc, char *argv[]) {
     //! 判断参数是否正确
@@ -67,6 +71,12 @@ int main(int argc, char *argv[]) {
     http_conn* users = new http_conn[MAX_FD];
     //写网络的代码
     int listenfd = socket(PF_INET, SOCK_STREAM, 0);
+
+    struct linger optLinger = { 0 };
+    optLinger.l_onoff = 1;
+    optLinger.l_linger = 1;
+
+    setsockopt(listenfd, SOL_SOCKET, SO_LINGER, &optLinger, sizeof(optLinger));
     int reuse = 1;
     //设置端口复用 要在绑定之前设置
     setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
@@ -85,12 +95,18 @@ int main(int argc, char *argv[]) {
 
     //将监听的文件描述符添加到epoll对象中
     addfd(epollfd, listenfd, false);
-
+    int timeoutMS = 20000;
+    int timeMS = -1;
+    HeapTimer* timer = new HeapTimer();
     //! zhixing
     http_conn::m_epollfd = epollfd;
     while(1){
         //监听 默认阻塞
-        int num = epoll_wait(epollfd, events, MAX_EVENT_NUMBER, -1); //返回检测到了几个事件
+        cout<<"+++++++++++++++++++++++++++++++++++"<<endl;
+        if(timeoutMS > 0){
+            timeMS = timer->GetNextTick();
+        }
+        int num = epoll_wait(epollfd, events, MAX_EVENT_NUMBER, timeoutMS); //返回检测到了几个事件
         if(num < 0 && errno != EINTR) {
             cout<<"epoll failure"<<endl;
             break;
@@ -112,6 +128,9 @@ int main(int argc, char *argv[]) {
 
                 //将连接放入数组中 users 将文件描述符作为索引
                 users[connfd].init(connfd, client_address);
+                timer->add(connfd, timeoutMS, cb, &users[connfd]);
+                cout<<"建立连接："<<connfd<<endl;
+
             }
             //对方异常断开等错误事件
             else if(events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){
@@ -119,7 +138,10 @@ int main(int argc, char *argv[]) {
             }
             //du
             else if(events[i].events & EPOLLIN){
+                cout<<"接收HTTP请求："<<sockfd<<endl;
                 if(users[sockfd].read()){
+                    cout<<"接收成功，调整计时器时间"<<sockfd<<endl;
+                    timer->adjust(sockfd, timeoutMS);
                     //一次性读完 交给工作线程处理
                     pool->append(users+sockfd);
                 }
@@ -128,6 +150,7 @@ int main(int argc, char *argv[]) {
                 }
             }
             else if(events[i].events & EPOLLOUT){
+                cout<<"回复HTTP请求："<<sockfd<<endl;
                 if(!users[sockfd].write()){
                     users[sockfd].close_conn();
                 }

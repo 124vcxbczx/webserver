@@ -12,7 +12,7 @@ const char* error_500_title = "Internal Error";
 const char* error_500_form = "There was an unusual problem serving the requested file.\n";
 
 // 网站的根目录
-const char* doc_root = "/home/liqm/CLionProjects/webserver//resources";
+const char* doc_root = "/home/liqm/CLionProjects/webServer/resources";
 
 int setnonblocking( int fd ) {
     int old_option = fcntl( fd, F_GETFL );
@@ -216,7 +216,7 @@ http_conn::HTTP_CODE http_conn::parse_headers(char* text) {
         text += strspn( text, " \t" );
         m_host = text;
     } else {
-        printf( "oop! unknow header %s\n", text );
+//        printf( "oop! unknow header %s\n", text );
     }
     return NO_REQUEST;
 }
@@ -248,7 +248,7 @@ http_conn::HTTP_CODE http_conn::process_read() {
         // 获取一行数据
         text = get_line();//GET / HTTP/1.1
         m_start_line = m_checked_idx;
-        printf( "got 1 http line: %s\n", text );
+//        printf( "got 1 http line: %s\n", text );
 
         switch ( m_check_state ) {
             case CHECK_STATE_REQUESTLINE: {
